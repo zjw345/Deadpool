@@ -6,7 +6,7 @@ var (
 	SocksList     []string
 	EffectiveList []string
 	proxyIndex    int
-	Timeout       int
+	var Timeout = 10  // 设置全局默认超时时间为 10 秒
 	LastDataFile  = "lastData.txt"
 	Wg            sync.WaitGroup
 	mu            sync.Mutex
