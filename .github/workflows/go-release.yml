@@ -1,0 +1,40 @@
+name: Go Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送标签（如 v1.0.0）时触发构建
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # 使用 Ubuntu 作为基础运行环境
+
+    strategy:
+      matrix:
+        os: [linux, windows, macos]  # 目标操作系统
+        arch: [amd64, arm64]         # 目标架构
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.20'  # 指定 Go 版本
+
+    - name: Build Go binaries
+      run: |
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o myapp-${{ matrix.os }}-${{ matrix.arch }} .
+        
+    - name: Archive binaries
+      run: |
+        tar -czf myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz myapp-${{ matrix.os }}-${{ matrix.arch }}
+        mv myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz ./release-artifacts/
+
+    - name: Upload release assets to GitHub
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./release-artifacts/myapp-*.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动授权发布到 Releases
