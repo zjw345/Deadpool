@@ -21,7 +21,7 @@ const maxRetries = 3 // 最大重试次数
 // 防止goroutine 异步处理问题
 var addSocksMu sync.Mutex
 var currentProxy string // 当前使用的代理
-var Timeout = 10 // 设置超时时间为10秒
+
 
 
 func addSocks(socks5 string) {
@@ -94,6 +94,10 @@ func CheckSocks(checkSocks CheckSocksConfig, socksListParam []string) {
 	startTime := time.Now()
 	maxConcurrentReq := checkSocks.MaxConcurrentReq
 	timeout := checkSocks.Timeout
+	if timeout == 0 {
+        timeout = 10  // 设置默认超时时间为 10 秒
+        }
+	
 	semaphore = make(chan struct{}, maxConcurrentReq)
 
 	checkRspKeywords := checkSocks.CheckRspKeywords
