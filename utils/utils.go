@@ -17,10 +17,12 @@ import (
 
 	"golang.org/x/net/proxy"
 )
-
+const maxRetries = 3 // 最大重试次数
 // 防止goroutine 异步处理问题
 var addSocksMu sync.Mutex
 var currentProxy string // 当前使用的代理
+var Timeout = 10 // 设置超时时间为10秒
+
 
 func addSocks(socks5 string) {
 	addSocksMu.Lock()
@@ -215,37 +217,44 @@ func DefineDial(ctx context.Context, network, address string) (net.Conn, error) 
 	return transmitReqFromClient(network, address)
 }
 
+
+
 func transmitReqFromClient(network string, address string) (net.Conn, error) {
     for {
         tempProxy := getNextProxy()
         if tempProxy == "" {
             return nil, fmt.Errorf("没有可用代理")
         }
-        fmt.Println(time.Now().Format("2006-01-02 15:04:05") + "\t" + tempProxy)
+        fmt.Println(time.Now().Format("2006-01-02 15:04:05") + "\t正在使用代理：" + tempProxy)
 
         timeout := time.Duration(Timeout) * time.Second
         dialer := &net.Dialer{
             Timeout: timeout,
         }
 
-        dialect, err := proxy.SOCKS5(network, tempProxy, nil, dialer)
-        if err != nil {
-            delInvalidProxy(tempProxy)
-            fmt.Printf("%s无效，切换到下一个代理...\n", tempProxy)
-            continue // 直接尝试下一个代理
+        // 重试机制
+        for retries := 0; retries < maxRetries; retries++ {
+            dialect, err := proxy.SOCKS5(network, tempProxy, nil, dialer)
+            if err != nil {
+                fmt.Printf("%s无效，尝试重试 [%d/%d]...\n", tempProxy, retries+1, maxRetries)
+                continue // 直接进入下一次重试
+            }
+
+            conn, err := dialect.Dial(network, address)
+            if err != nil {
+                fmt.Printf("%s连接失败，尝试重试 [%d/%d]...\n", tempProxy, retries+1, maxRetries)
+                continue // 直接进入下一次重试
+            }
+
+            // 成功返回连接
+            return conn, nil
         }
 
-        conn, err := dialect.Dial(network, address)
-        if err != nil {
-            delInvalidProxy(tempProxy)
-            fmt.Printf("%s无效，切换到下一个代理...\n", tempProxy)
-            continue // 直接尝试下一个代理
-        }
-
-        return conn, nil // 成功返回连接
+        // 如果达到重试次数，移除无效代理
+        fmt.Printf("%s达到最大重试次数，判定为无效，切换到下一个代理...\n", tempProxy)
+        delInvalidProxy(tempProxy)
     }
 }
-
 
 
 
