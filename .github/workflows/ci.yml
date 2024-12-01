@@ -21,7 +21,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       with:
-        ref: zjw345-patch-1-API-socks5  # 指定分支
+        ref: ${{ github.ref_name }}  # 使用触发时的分支
 
     - name: Set up Go
       uses: actions/setup-go@v3
