@@ -1,7 +1,7 @@
 name: Manual Go Build and Release
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
     inputs:
       version:
         description: '请输入版本号 (如 v1.0.0)'
@@ -20,64 +20,56 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
 
     - name: Get all branches
-      id: get-branches
       run: |
-        BRANCHES=$(git ls-remote --heads origin | awk -F'/' '{print $NF}' | tr '\n' ' ')
-        echo "BRANCHES=$BRANCHES" >> $GITHUB_ENV
+        echo "BRANCHES=$(git branch -r | grep -v '\->' | sed 's/origin\///' | tr '\n' ' ')" >> $GITHUB_ENV
 
-    - name: Loop through branches and build
-      shell: bash
+    - name: Build binaries
       run: |
-        ARTIFACTS_DIR=./release-artifacts-${{ github.run_id }}
-        mkdir -p $ARTIFACTS_DIR
-
+        mkdir -p ./release-artifacts/${{ matrix.os }}-${{ matrix.arch }}
         for BRANCH in $BRANCHES; do
           echo "Building branch: $BRANCH"
-          git checkout $BRANCH || { echo "Failed to checkout branch $BRANCH"; continue; }
-          
-          for OS in linux windows; do
-            for ARCH in amd64 arm64; do
-              echo "Building for OS: $OS, ARCH: $ARCH"
-              SANITIZED_BRANCH=$(echo $BRANCH | sed 's/[^a-zA-Z0-9_-]/_/g')
-              FILENAME=SockFinder-${SANITIZED_BRANCH}-${OS}-${ARCH}
-              [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
-              GOOS=$OS GOARCH=$ARCH go build -o $FILENAME . || { echo "Build failed for $OS/$ARCH"; continue; }
-              DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
-              mkdir -p $DEST_DIR
-              mv $FILENAME $DEST_DIR/
-            done
-          done
+          git checkout $BRANCH
+          FILENAME=SockFinder-${BRANCH}-${{ matrix.os }}-${{ matrix.arch }}
+          [[ "${{ matrix.os }}" == "windows" ]] && FILENAME="${FILENAME}.exe"
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o $FILENAME .
+          mv $FILENAME ./release-artifacts/${{ matrix.os }}-${{ matrix.arch }}/
         done
 
-    - name: Archive binaries by OS and ARCH
-      shell: bash
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-artifacts-${{ matrix.os }}-${{ matrix.arch }}
+        path: ./release-artifacts/${{ matrix.os }}-${{ matrix.arch }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./release-artifacts
+
+    - name: Archive binaries
       run: |
-        ARTIFACTS_DIR=./release-artifacts-${{ github.run_id }}
-        for OS in linux windows; do
-          for ARCH in amd64 arm64; do
-            DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
-            ARCHIVE_FILE=$ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}-${{ github.run_id }}.tar.gz
-            if [ -d "$DEST_DIR" ] && [ "$(ls -A $DEST_DIR)" ]; then
-              tar -czf $ARCHIVE_FILE -C $DEST_DIR .
-              echo "Created archive: $ARCHIVE_FILE"
-            else
-              echo "No files to archive for $OS/$ARCH"
-            fi
-          done
+        OUTPUT_DIR=./final-release-artifacts
+        mkdir -p $OUTPUT_DIR
+        for OS_ARCH_DIR in ./release-artifacts/*; do
+          OS_ARCH=$(basename $OS_ARCH_DIR)
+          tar -czf $OUTPUT_DIR/SockFinder-${OS_ARCH}-${{ github.run_id }}.tar.gz -C $OS_ARCH_DIR .
         done
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./release-artifacts-${{ github.run_id }}/SockFinder-*.tar.gz
+        files: ./final-release-artifacts/*.tar.gz
         tag_name: ${{ inputs.version }}
         name: ${{ inputs.version }}
         draft: false
         prerelease: false
-        fail_on_unmatched_files: true  # Ensure only matched files are uploaded
+        overwrite: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
