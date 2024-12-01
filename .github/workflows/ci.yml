@@ -21,8 +21,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       with:
-        # 获取所有分支
-        fetch-depth: 0
+        fetch-depth: 0  # 获取所有分支
 
     - name: Get all branches
       run: |
@@ -33,29 +32,25 @@ jobs:
     - name: Loop through branches and build
       shell: bash
       run: |
-        # 设置唯一的 artifacts 目录，避免冲突
+        # 设置唯一的 artifacts 目录
         ARTIFACTS_DIR=./release-artifacts-${GITHUB_RUN_ID}
         mkdir -p $ARTIFACTS_DIR
 
         for BRANCH in $BRANCHES; do
           echo "Building branch: $BRANCH"
           
-          # 切换分支，失败时跳过
           git checkout $BRANCH || { echo "Failed to checkout branch $BRANCH"; continue; }
           
           for OS in linux windows; do
             for ARCH in amd64 arm64; do
               echo "Building for OS: $OS, ARCH: $ARCH"
               
-              # 安全的文件名
               SANITIZED_BRANCH=$(echo $BRANCH | sed 's/[^a-zA-Z0-9_-]/_/g')
               FILENAME=SockFinder-${SANITIZED_BRANCH}-${OS}-${ARCH}
               [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
 
-              # 构建二进制文件，失败时跳过
               GOOS=$OS GOARCH=$ARCH go build -o $FILENAME . || { echo "Build failed for $OS/$ARCH on branch $BRANCH"; continue; }
 
-              # 移动文件到 artifacts 目录
               DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
               mkdir -p $DEST_DIR
               mv $FILENAME $DEST_DIR/
@@ -81,7 +76,7 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ${{ steps.archive.outputs.files }}
+        files: ${{ runner.workspace }}/release-artifacts-${{ github.run_id }}/SockFinder-*.tar.gz  # 修复路径问题
         tag_name: ${{ inputs.version }}
         release_name: ${{ inputs.version }}
         draft: false
