@@ -21,29 +21,51 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       with:
-        ref: ${{ github.ref_name }}  # 使用触发时的分支
+        # 获取所有分支
+        fetch-depth: 0
 
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: '1.23'
+    - name: Get all branches
+      run: echo "BRANCHES=$(git branch -r | grep -v '\->' | sed 's/origin\///' | tr '\n' ' ')" >> $GITHUB_ENV
 
-    - name: Ensure release directory exists
-      run: mkdir -p ./release-artifacts
-
-    - name: Build Go binaries
+    - name: Loop through branches and build
       run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o myapp-${{ matrix.os }}-${{ matrix.arch }} .
+        mkdir -p ./release-artifacts
+        for OS in linux windows; do
+          for ARCH in amd64 arm64; do
+            mkdir -p ./release-artifacts/${OS}-${ARCH}
+          done
+        done
 
-    - name: Archive binaries
+        for BRANCH in $BRANCHES; do
+          echo "Building branch: $BRANCH"
+          git checkout $BRANCH
+          
+          for OS in linux windows; do
+            for ARCH in amd64 arm64; do
+              echo "Building for OS: $OS, ARCH: $ARCH"
+              FILENAME=SockFinder-${BRANCH}-${OS}-${ARCH}
+              [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
+              
+              GOOS=$OS GOARCH=$ARCH go build -o $FILENAME .
+              
+              # 移动构建的文件到对应目录
+              mv $FILENAME ./release-artifacts/${OS}-${ARCH}/
+            done
+          done
+        done
+
+    - name: Archive binaries by OS and ARCH
       run: |
-        tar -czf myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz myapp-${{ matrix.os }}-${{ matrix.arch }}
-        mv myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz ./release-artifacts/
+        for OS in linux windows; do
+          for ARCH in amd64 arm64; do
+            tar -czf ./release-artifacts/SockFinder-${OS}-${ARCH}.tar.gz -C ./release-artifacts/${OS}-${ARCH} .
+          done
+        done
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./release-artifacts/myapp-*.tar.gz
+        files: ./release-artifacts/SockFinder-*.tar.gz  # 只上传打包好的文件
         tag_name: ${{ inputs.version }}  # 使用输入的版本号作为标签
         release_name: ${{ inputs.version }}  # 使用输入的版本号作为发布名称
         draft: false
