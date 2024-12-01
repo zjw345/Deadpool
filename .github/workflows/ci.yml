@@ -43,7 +43,7 @@ jobs:
           for OS in linux windows; do
             for ARCH in amd64 arm64; do
               echo "Building for OS: $OS, ARCH: $ARCH"
-              FILENAME=myapp-${BRANCH}-${OS}-${ARCH}
+              FILENAME=SockFinder-${BRANCH}-${OS}-${ARCH}
               [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
               
               GOOS=$OS GOARCH=$ARCH go build -o $FILENAME .
@@ -58,14 +58,14 @@ jobs:
       run: |
         for OS in linux windows; do
           for ARCH in amd64 arm64; do
-            tar -czf ./release-artifacts/myapp-${OS}-${ARCH}.tar.gz -C ./release-artifacts/${OS}-${ARCH} .
+            tar -czf ./release-artifacts/SockFinder-${OS}-${ARCH}.tar.gz -C ./release-artifacts/${OS}-${ARCH} .
           done
         done
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./release-artifacts/myapp-*.tar.gz  # 只上传打包好的文件
+        files: ./release-artifacts/SockFinder-*.tar.gz  # 只上传打包好的文件
         tag_name: ${{ inputs.version }}  # 使用输入的版本号作为标签
         release_name: ${{ inputs.version }}  # 使用输入的版本号作为发布名称
         draft: false
