@@ -17,7 +17,7 @@ func main() {
 	utils.Banner()
 	fmt.Print("By:thinkoaa GitHub:https://github.com/thinkoaa/Deadpool\n\n\n")
 	//读取配置文件
-	config, err := utils.LoadConfig("config.toml")
+	config, err := utils.LoadConfig("config2.toml")
 	if err != nil {
 		fmt.Printf("config.toml配置文件存在错误字符: %d\n", err) //通过%d弹出错误的细节
 		os.Exit(1)
