@@ -33,11 +33,12 @@ jobs:
 
     - name: Build Go binaries
       run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o myapp-${{ matrix.os }}-${{ matrix.arch }} .
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o myapp-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} .
+
 
     - name: Archive binaries
       run: |
-        tar -czf myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz myapp-${{ matrix.os }}-${{ matrix.arch }}
+        tar -czf srusocks5update-${{ matrix.os }}-${{ matrix.arch }}.tar.gz myapp-${{ matrix.os }}-${{ matrix.arch }}
         mv myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz ./release-artifacts/
 
     - name: Create GitHub Release
