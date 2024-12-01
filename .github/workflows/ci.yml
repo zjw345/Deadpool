@@ -29,30 +29,43 @@ jobs:
 
     - name: Loop through branches and build
       run: |
+        mkdir -p ./release-artifacts
+        for OS in linux windows; do
+          for ARCH in amd64 arm64; do
+            mkdir -p ./release-artifacts/${OS}-${ARCH}
+          done
+        done
+
         for BRANCH in $BRANCHES; do
           echo "Building branch: $BRANCH"
           git checkout $BRANCH
           
-          # 创建发布目录
-          mkdir -p ./release-artifacts/$BRANCH
-          
           for OS in linux windows; do
             for ARCH in amd64 arm64; do
               echo "Building for OS: $OS, ARCH: $ARCH"
-              OUTPUT=myapp-${BRANCH}-${OS}-${ARCH}${{ matrix.os == 'windows' && '.exe' || '' }}
-              GOOS=$OS GOARCH=$ARCH go build -o $OUTPUT .
+              FILENAME=myapp-${BRANCH}-${OS}-${ARCH}
+              [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
               
-              # 打包
-              tar -czf myapp-${BRANCH}-${OS}-${ARCH}.tar.gz $OUTPUT
-              mv myapp-${BRANCH}-${OS}-${ARCH}.tar.gz ./release-artifacts/$BRANCH/
+              GOOS=$OS GOARCH=$ARCH go build -o $FILENAME .
+              
+              # 移动构建的文件到对应目录
+              mv $FILENAME ./release-artifacts/${OS}-${ARCH}/
             done
+          done
+        done
+
+    - name: Archive binaries by OS and ARCH
+      run: |
+        for OS in linux windows; do
+          for ARCH in amd64 arm64; do
+            tar -czf ./release-artifacts/myapp-${OS}-${ARCH}.tar.gz -C ./release-artifacts/${OS}-${ARCH} .
           done
         done
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./release-artifacts/**/*  # 上传所有分支的压缩包
+        files: ./release-artifacts/myapp-*.tar.gz  # 只上传打包好的文件
         tag_name: ${{ inputs.version }}  # 使用输入的版本号作为标签
         release_name: ${{ inputs.version }}  # 使用输入的版本号作为发布名称
         draft: false
