@@ -1,25 +1,17 @@
-name: Go CI Build and Test
+name: Manual Go Build and Release
 
 on:
-  push:
-    branches:
-      - main
-      - zjw345-patch-1-API-socks5
-  pull_request:
-    branches:
-      - main
-      - zjw345-patch-1-API-socks5
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发
     inputs:
       version:
-        description: 'Version number'
+        description: '请输入版本号 (如 v1.0.0)'
         required: true
-        default: 'v1.0.0'  # 设置默认值
-        type: string  # 参数类型为字符串
+        default: 'v1.0.0'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         os: [linux, windows]
@@ -28,36 +20,33 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      with:
+        ref: zjw345-patch-1-API-socks5  # 指定分支
 
     - name: Set up Go
       uses: actions/setup-go@v3
       with:
         go-version: '1.23'
 
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Run tests
-      run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go test ./...
+    - name: Ensure release directory exists
+      run: mkdir -p ./release-artifacts
 
     - name: Build Go binaries
       run: |
-        echo "Building version: ${{ github.event.inputs.version }}"  # 打印输入的版本号
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o myapp-${{ matrix.os }}-${{ matrix.arch }}-${{ github.event.inputs.version }} .
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o myapp-${{ matrix.os }}-${{ matrix.arch }} .
 
     - name: Archive binaries
       run: |
-        tar -czf myapp-${{ matrix.os }}-${{ matrix.arch }}-${{ github.event.inputs.version }}.tar.gz myapp-${{ matrix.os }}-${{ matrix.arch }}-${{ github.event.inputs.version }}
-        mv myapp-${{ matrix.os }}-${{ matrix.arch }}-${{ github.event.inputs.version }}.tar.gz ./release-artifacts/
+        tar -czf myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz myapp-${{ matrix.os }}-${{ matrix.arch }}
+        mv myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz ./release-artifacts/
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
       with:
-        name: myapp-binaries
-        path: ./release-artifacts/myapp-*.tar.gz
+        files: ./release-artifacts/myapp-*.tar.gz
+        tag_name: ${{ inputs.version }}  # 使用输入的版本号作为标签
+        release_name: ${{ inputs.version }}  # 使用输入的版本号作为发布名称
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
