@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - main            # 在 main 分支上进行推送时触发
-      - your-new-branch # 可以替换为你想要触发构建的其他分支
+      - zjw345-patch-1-API-socks5 # 可以替换为你想要触发构建的其他分支
   pull_request:
     branches:
       - main            # 在对 main 分支发起 PR 时触发
-      - your-new-branch # 对其他分支发起 PR 时也可以触发构建
+      - zjw345-patch-1-API-socks5 # 对其他分支发起 PR 时也可以触发构建
 
 jobs:
   build:
