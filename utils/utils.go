@@ -30,16 +30,38 @@ func addSocks(socks5 string) {
 	addSocksMu.Unlock()
 }
 func fetchContent(baseURL string, method string, timeout int, urlParams map[string]string, headers map[string]string, jsonBody string) (string, error) {
-	client := &http.Client{
-		Transport: &http.Transport{
+	// SOCKS5代理配置
+	socks5Proxy := "127.0.0.1:10086"
+	useProxy := strings.Contains(baseURL, "hunter.qianxin.com") || strings.Contains(baseURL, "fofa.info") || strings.Contains(baseURL, "quake.360.net")
+	
+	var transport *http.Transport
+	if useProxy {
+		dialer, err := proxy.SOCKS5("tcp", socks5Proxy, nil, &net.Dialer{
+			Timeout: time.Duration(timeout) * time.Second,
+		})
+		if err != nil {
+			return "", fmt.Errorf("无法创建SOCKS5代理: %v", err)
+		}
+		transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-		Timeout: time.Duration(timeout) * time.Second,
+			Dial:            dialer.Dial,
+		}
+	} else {
+		transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
 	}
+	
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   time.Duration(timeout) * time.Second,
+	}
+	
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return "", err
 	}
+	
 	if urlParams != nil {
 		q := u.Query()
 		for key, value := range urlParams {
@@ -47,35 +69,38 @@ func fetchContent(baseURL string, method string, timeout int, urlParams map[stri
 		}
 		u.RawQuery = q.Encode()
 	}
-
+	
 	var req *http.Request
 	if jsonBody != "" {
 		req, err = http.NewRequest(method, u.String(), bytes.NewBufferString(jsonBody))
 	} else {
 		req, err = http.NewRequest(method, u.String(), nil)
 	}
-
+	
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 Edg/112.0.1722.17")
+	
+	req.Header.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36")
 	if len(headers) != 0 {
 		for key, value := range headers {
 			req.Header.Add(key, value)
 		}
 	}
+	
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-
+	
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
 	return string(body), nil
 }
+
 
 func RemoveDuplicates(list *[]string) {
 	seen := make(map[string]struct{})
