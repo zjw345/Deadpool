@@ -21,42 +21,31 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
       with:
-        # 获取所有分支
         fetch-depth: 0
 
     - name: Get all branches
       id: get-branches
       run: |
-        # 获取所有远程分支名并过滤无效分支
         BRANCHES=$(git ls-remote --heads origin | awk -F'/' '{print $NF}' | tr '\n' ' ')
         echo "BRANCHES=$BRANCHES" >> $GITHUB_ENV
 
     - name: Loop through branches and build
       shell: bash
       run: |
-        # 创建唯一的 artifacts 目录
-        ARTIFACTS_DIR=./release-artifacts-${GITHUB_RUN_ID}
+        ARTIFACTS_DIR=./release-artifacts-${{ github.run_id }}
         mkdir -p $ARTIFACTS_DIR
-        
+
         for BRANCH in $BRANCHES; do
           echo "Building branch: $BRANCH"
-          
-          # 切换到指定分支，失败时跳过
           git checkout $BRANCH || { echo "Failed to checkout branch $BRANCH"; continue; }
           
           for OS in linux windows; do
             for ARCH in amd64 arm64; do
               echo "Building for OS: $OS, ARCH: $ARCH"
-
-              # 确保分支名安全，构建文件名
               SANITIZED_BRANCH=$(echo $BRANCH | sed 's/[^a-zA-Z0-9_-]/_/g')
               FILENAME=SockFinder-${SANITIZED_BRANCH}-${OS}-${ARCH}
               [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
-
-              # 构建并处理错误
               GOOS=$OS GOARCH=$ARCH go build -o $FILENAME . || { echo "Build failed for $OS/$ARCH"; continue; }
-
-              # 移动构建文件到对应目录
               DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
               mkdir -p $DEST_DIR
               mv $FILENAME $DEST_DIR/
@@ -67,12 +56,11 @@ jobs:
     - name: Archive binaries by OS and ARCH
       shell: bash
       run: |
+        ARTIFACTS_DIR=./release-artifacts-${{ github.run_id }}
         for OS in linux windows; do
           for ARCH in amd64 arm64; do
-            DEST_DIR=./release-artifacts-${GITHUB_RUN_ID}/${OS}-${ARCH}
-            ARCHIVE_FILE=./release-artifacts-${GITHUB_RUN_ID}/SockFinder-${OS}-${ARCH}.tar.gz
-            
-            # 如果目录非空，则打包
+            DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
+            ARCHIVE_FILE=$ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}.tar.gz
             if [ -d "$DEST_DIR" ] && [ "$(ls -A $DEST_DIR)" ]; then
               tar -czf $ARCHIVE_FILE -C $DEST_DIR .
               echo "Created archive: $ARCHIVE_FILE"
@@ -85,9 +73,9 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./release-artifacts-${GITHUB_RUN_ID}/SockFinder-*.tar.gz  # 只上传打包好的文件
-        tag_name: ${{ inputs.version }}  # 使用输入的版本号作为标签
-        release_name: ${{ inputs.version }}  # 使用输入的版本号作为发布名称
+        files: ./release-artifacts-${{ github.run_id }}/SockFinder-*.tar.gz
+        tag_name: ${{ inputs.version }}
+        name: ${{ inputs.version }}
         draft: false
         prerelease: false
       env:
