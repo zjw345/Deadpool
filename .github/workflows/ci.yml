@@ -60,7 +60,7 @@ jobs:
         for OS in linux windows; do
           for ARCH in amd64 arm64; do
             DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
-            ARCHIVE_FILE=$ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}.tar.gz
+            ARCHIVE_FILE=$ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}-${{ github.run_id }}.tar.gz  # Add run_id to ensure unique filename
             if [ -d "$DEST_DIR" ] && [ "$(ls -A $DEST_DIR)" ]; then
               tar -czf $ARCHIVE_FILE -C $DEST_DIR .
               echo "Created archive: $ARCHIVE_FILE"
