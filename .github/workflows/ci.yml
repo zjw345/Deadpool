@@ -29,7 +29,7 @@ jobs:
         BRANCHES=$(git ls-remote --heads origin | awk -F'/' '{print $NF}' | tr '\n' ' ')
         echo "BRANCHES=$BRANCHES" >> $GITHUB_ENV
 
-    - name: Build binaries
+    - name: Loop through branches and build
       shell: bash
       run: |
         ARTIFACTS_DIR=./release-artifacts-${{ github.run_id }}
@@ -39,51 +39,41 @@ jobs:
           echo "Building branch: $BRANCH"
           git checkout $BRANCH || { echo "Failed to checkout branch $BRANCH"; continue; }
           
-          OS=${{ matrix.os }}
-          ARCH=${{ matrix.arch }}
-          
-          echo "Building for OS: $OS, ARCH: $ARCH"
-          SANITIZED_BRANCH=$(echo $BRANCH | sed 's/[^a-zA-Z0-9_-]/_/g')
-          FILENAME=SockFinder-${SANITIZED_BRANCH}-${OS}-${ARCH}
-          [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
-          GOOS=$OS GOARCH=$ARCH go build -o $FILENAME . || { echo "Build failed for $OS/$ARCH"; continue; }
-          DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
-          mkdir -p $DEST_DIR
-          mv $FILENAME $DEST_DIR/
-      env:
-        BRANCHES: ${{ env.BRANCHES }}
+          for OS in linux windows; do
+            for ARCH in amd64 arm64; do
+              echo "Building for OS: $OS, ARCH: $ARCH"
+              SANITIZED_BRANCH=$(echo $BRANCH | sed 's/[^a-zA-Z0-9_-]/_/g')
+              FILENAME=SockFinder-${SANITIZED_BRANCH}-${OS}-${ARCH}
+              [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
+              GOOS=$OS GOARCH=$ARCH go build -o $FILENAME . || { echo "Build failed for $OS/$ARCH"; continue; }
+              DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
+              mkdir -p $DEST_DIR
+              mv $FILENAME $DEST_DIR/
+            done
+          done
+        done
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-artifacts-${{ matrix.os }}-${{ matrix.arch }}
-        path: ./release-artifacts-${{ github.run_id }}/${{ matrix.os }}-${{ matrix.arch }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v3
-      with:
-        path: ./release-artifacts
-
-    - name: Archive all artifacts
+    - name: Archive binaries by OS and ARCH
       shell: bash
       run: |
-        FINAL_ARTIFACTS_DIR=./final-release-artifacts
-        mkdir -p $FINAL_ARTIFACTS_DIR
-        for ARTIFACT in ./release-artifacts/*; do
-          ARCHIVE_FILE=${FINAL_ARTIFACTS_DIR}/$(basename $ARTIFACT).tar.gz
-          tar -czf $ARCHIVE_FILE -C $ARTIFACT .
-          echo "Created archive: $ARCHIVE_FILE"
+        ARTIFACTS_DIR=./release-artifacts-${{ github.run_id }}
+        for OS in linux windows; do
+          for ARCH in amd64 arm64; do
+            DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
+            ARCHIVE_FILE=$ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}.tar.gz
+            if [ -d "$DEST_DIR" ] && [ "$(ls -A $DEST_DIR)" ]; then
+              tar -czf $ARCHIVE_FILE -C $DEST_DIR .
+              echo "Created archive: $ARCHIVE_FILE"
+            else
+              echo "No files to archive for $OS/$ARCH"
+            fi
+          done
         done
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./final-release-artifacts/*.tar.gz
+        files: ./release-artifacts-${{ github.run_id }}/SockFinder-*.tar.gz
         tag_name: ${{ inputs.version }}
         name: ${{ inputs.version }}
         draft: false
