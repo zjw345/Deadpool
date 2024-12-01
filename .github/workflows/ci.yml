@@ -60,7 +60,7 @@ jobs:
         for OS in linux windows; do
           for ARCH in amd64 arm64; do
             DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
-            ARCHIVE_FILE=$ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}-${{ github.run_id }}.tar.gz  # Add run_id to ensure unique filename
+            ARCHIVE_FILE=$ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}-${{ github.run_id }}.tar.gz
             if [ -d "$DEST_DIR" ] && [ "$(ls -A $DEST_DIR)" ]; then
               tar -czf $ARCHIVE_FILE -C $DEST_DIR .
               echo "Created archive: $ARCHIVE_FILE"
@@ -78,5 +78,6 @@ jobs:
         name: ${{ inputs.version }}
         draft: false
         prerelease: false
+        fail_on_unmatched_files: true  # Ensure only matched files are uploaded
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
