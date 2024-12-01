@@ -1,7 +1,7 @@
 name: Manual Go Build and Release
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
     inputs:
       version:
         description: '请输入版本号 (如 v1.0.0)'
@@ -14,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [linux, windows]
+        os: [linux, windows, darwin]  # 额外支持macOS
         arch: [amd64, arm64]
 
     steps:
@@ -29,24 +29,43 @@ jobs:
         go-version: '1.23'
 
     - name: Ensure release directory exists
-      run: mkdir -p ./release-artifacts
+      run: mkdir -p ./release-artifacts/${{ matrix.os }}
 
     - name: Build Go binaries
       run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o myapp-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} .
+        BRANCH=${{ github.ref_name }}
+        OUTPUT_NAME=myapp-${{ matrix.os }}-${{ matrix.arch }}-${BRANCH}${{ matrix.os == 'windows' && '.exe' || '' }}
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o $OUTPUT_NAME .
+        mv $OUTPUT_NAME ./release-artifacts/${{ matrix.os }}/
 
-
-    - name: Archive binaries
+    - name: Archive binaries by OS
       run: |
-        tar -czf srusocks5update-${{ matrix.os }}-${{ matrix.arch }}.tar.gz myapp-${{ matrix.os }}-${{ matrix.arch }}
-        mv myapp-${{ matrix.os }}-${{ matrix.arch }}.tar.gz ./release-artifacts/
+        cd ./release-artifacts/${{ matrix.os }}
+        tar -czf ../myapp-${{ matrix.os }}-${{ inputs.version }}.tar.gz *
+        cd ../..
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-${{ matrix.os }}-${{ inputs.version }}
+        path: ./release-artifacts/myapp-${{ matrix.os }}-${{ inputs.version }}.tar.gz
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./release-artifacts
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         files: ./release-artifacts/myapp-*.tar.gz
-        tag_name: ${{ inputs.version }}  # 使用输入的版本号作为标签
-        release_name: ${{ inputs.version }}  # 使用输入的版本号作为发布名称
+        tag_name: ${{ inputs.version }}
+        release_name: Release ${{ inputs.version }}
         draft: false
         prerelease: false
       env:
