@@ -25,49 +25,65 @@ jobs:
         fetch-depth: 0
 
     - name: Get all branches
-      run: echo "BRANCHES=$(git branch -r | grep -v '\->' | sed 's/origin\///' | tr '\n' ' ')" >> $GITHUB_ENV
+      run: |
+        # 获取远程所有分支名
+        BRANCHES=$(git ls-remote --heads origin | awk -F'/' '{print $NF}' | tr '\n' ' ')
+        echo "BRANCHES=$BRANCHES" >> $GITHUB_ENV
 
     - name: Loop through branches and build
+      shell: bash
       run: |
-        mkdir -p ./release-artifacts
-        for OS in linux windows; do
-          for ARCH in amd64 arm64; do
-            mkdir -p ./release-artifacts/${OS}-${ARCH}
-          done
-        done
+        # 设置唯一的 artifacts 目录，避免冲突
+        ARTIFACTS_DIR=./release-artifacts-${GITHUB_RUN_ID}
+        mkdir -p $ARTIFACTS_DIR
 
         for BRANCH in $BRANCHES; do
           echo "Building branch: $BRANCH"
-          git checkout $BRANCH
+          
+          # 切换分支，失败时跳过
+          git checkout $BRANCH || { echo "Failed to checkout branch $BRANCH"; continue; }
           
           for OS in linux windows; do
             for ARCH in amd64 arm64; do
               echo "Building for OS: $OS, ARCH: $ARCH"
-              FILENAME=SockFinder-${BRANCH}-${OS}-${ARCH}
+              
+              # 安全的文件名
+              SANITIZED_BRANCH=$(echo $BRANCH | sed 's/[^a-zA-Z0-9_-]/_/g')
+              FILENAME=SockFinder-${SANITIZED_BRANCH}-${OS}-${ARCH}
               [[ $OS == "windows" ]] && FILENAME="${FILENAME}.exe"
-              
-              GOOS=$OS GOARCH=$ARCH go build -o $FILENAME .
-              
-              # 移动构建的文件到对应目录
-              mv $FILENAME ./release-artifacts/${OS}-${ARCH}/
+
+              # 构建二进制文件，失败时跳过
+              GOOS=$OS GOARCH=$ARCH go build -o $FILENAME . || { echo "Build failed for $OS/$ARCH on branch $BRANCH"; continue; }
+
+              # 移动文件到 artifacts 目录
+              DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
+              mkdir -p $DEST_DIR
+              mv $FILENAME $DEST_DIR/
             done
           done
         done
 
     - name: Archive binaries by OS and ARCH
+      shell: bash
       run: |
         for OS in linux windows; do
           for ARCH in amd64 arm64; do
-            tar -czf ./release-artifacts/SockFinder-${OS}-${ARCH}.tar.gz -C ./release-artifacts/${OS}-${ARCH} .
+            DEST_DIR=$ARTIFACTS_DIR/${OS}-${ARCH}
+            if [ -d "$DEST_DIR" ]; then
+              tar -czf $ARTIFACTS_DIR/SockFinder-${OS}-${ARCH}.tar.gz -C $DEST_DIR .
+            fi
           done
         done
+
+        # 清理空目录
+        find $ARTIFACTS_DIR -type d -empty -delete
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./release-artifacts/SockFinder-*.tar.gz  # 只上传打包好的文件
-        tag_name: ${{ inputs.version }}  # 使用输入的版本号作为标签
-        release_name: ${{ inputs.version }}  # 使用输入的版本号作为发布名称
+        files: ${{ steps.archive.outputs.files }}
+        tag_name: ${{ inputs.version }}
+        release_name: ${{ inputs.version }}
         draft: false
         prerelease: false
       env:
